@@ -1,52 +1,24 @@
+import mysql.connector
 from fastapi import FastAPI
+import statistics as stats
 from pydantic import BaseModel
+import config
+
+temp_db = mysql.connector.connect(
+    host=config.DATABASE_CONFIG["host"],
+    user=config.DATABASE_CONFIG["user"],
+    password=config.DATABASE_CONFIG["password"],
+    database=config.DATABASE_CONFIG["database"],
+)
+cursor = temp_db.cursor()
 
 
 class Temperature(BaseModel):
-    timestamp: str
+    timestamp: int
     timezone: str
-    measurement: int
+    measurement: float
     unit: str
     location: str
-
-
-temps = [
-    Temperature(
-        timestamp="1681895166",
-        timezone="UTC",
-        measurement=1,
-        unit="F",
-        location="Germany"
-    ),
-    Temperature(
-        timestamp="1681895166",
-        timezone="UTC",
-        measurement=4,
-        unit="F",
-        location="Germany"
-    ),
-    Temperature(
-        timestamp="1681895166",
-        timezone="UTC",
-        measurement=8,
-        unit="F",
-        location="Germany"
-    ),
-    Temperature(
-        timestamp="1681895166",
-        timezone="UTC",
-        measurement=10,
-        unit="F",
-        location="Germany"
-    ),
-    Temperature(
-        timestamp="1681895168",
-        timezone="UTC",
-        measurement=2,
-        unit="F",
-        location="France"
-    ),
-]
 
 
 def median(arr):
@@ -60,31 +32,29 @@ def median(arr):
 app = FastAPI()
 
 
+@app.get("/")
+def list_all():
+    cursor.execute("SELECT * FROM temp_table")
+    return cursor.fetchall()
+
+
 @app.post("/temperature")
 def submit_temperature(item: Temperature):
-    temps.append(item)
-    print(temps)
+    cursor.execute("""INSERT INTO temp_table ( timestamp, timezone, measurement, unit, location ) VALUES (%s, %s, %s, %s, %s)""",
+                   (item.timestamp, item.timezone, item.measurement, item.unit, item.location))
+    temp_db.commit()
     return item
-
-
-@app.get("/temperature/{since}/{until}/{location}/{unit}/")
-def get_temperature(since: str, until: str, location: str, unit: str):
-    result = []
-    for temp in temps:
-        if temp.location == location and temp.unit == unit and temp.timestamp >= since and temp.timestamp <= until:
-            result.append(temp)
-    return result
 
 
 @app.get("/stats/{since}/{until}/{location}/{unit}/")
 def get_stats(since: str, until: str, location: str, unit: str):
-    result = []
-    for temp in temps:
-        if temp.location == location and temp.unit == unit and temp.timestamp >= since and temp.timestamp <= until:
-            result.append(temp.measurement)
+    cursor.execute("""SELECT measurement FROM temp_table WHERE location = %s AND unit = %s AND timestamp >= %s AND timestamp <= %s""",
+                   (location, unit, since, until))
+    result = list(map(lambda x: x[0], cursor.fetchall()))
+    print(result)
 
     return {
-        "average": sum(result) / len(result),
-        "median": median(result),
+        "average": stats.mean(result),
+        "median": stats.median(result),
         "count": len(result),
     }
