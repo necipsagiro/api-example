@@ -51,3 +51,17 @@ def get_temperature(since: str, until: str, location: str, unit: str):
     cursor.execute("""SELECT * FROM temp_table WHERE location = %s AND unit = %s AND timestamp >= %s AND timestamp <= %s""",
                    (location, unit, since, until))
     return cursor.fetchall()
+
+
+@app.get("/stats/{since}/{until}/{location}/{unit}/")
+def get_stats(since: str, until: str, location: str, unit: str):
+    cursor.execute("""SELECT measurement FROM temp_table WHERE location = %s AND unit = %s AND timestamp >= %s AND timestamp <= %s""",
+                   (location, unit, since, until))
+    result = list(map(lambda x: x[0], cursor.fetchall()))
+    print(result)
+
+    return {
+        "average": stats.mean(result),
+        "median": stats.median(result),
+        "count": len(result),
+    }
